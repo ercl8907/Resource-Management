@@ -146,7 +146,7 @@ export function TopNav() {
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-6 dark:border-zinc-800 dark:bg-zinc-950">
       <p className="text-sm font-semibold text-zinc-950 dark:text-zinc-50">
-        Dashboard
+        Resource Manager
       </p>
       <div className="flex items-center gap-4">
         {error && (

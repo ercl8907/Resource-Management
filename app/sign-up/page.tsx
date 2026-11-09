@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { clearLastActivity } from "@/lib/inactivity";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
@@ -69,6 +70,7 @@ export default function SignUpPage() {
           // The user is already signed in (email confirmation is disabled),
           // so go straight to the dashboard instead of the nav-less
           // /account-created confirmation page.
+          clearLastActivity();
           setIsNavigating(true);
           router.replace("/dashboard");
         } else {

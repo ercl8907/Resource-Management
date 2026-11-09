@@ -6,7 +6,7 @@ import { SignInForm } from "./sign-in-form";
 // route blocks instead of being prerendered with a static shell.
 export const instant = false;
 
-export default async function SignInPage() {
+export default async function SignInPage({ searchParams }: PageProps<"/">) {
   // Check the session on the server before rendering the form so a signed-in
   // user never receives the sign-in page (including via the browser back
   // button, which re-requests the route).
@@ -27,5 +27,8 @@ export default async function SignInPage() {
     redirect("/dashboard");
   }
 
-  return <SignInForm />;
+  const { reason } = await searchParams;
+  const wasLoggedOutForInactivity = reason === "inactivity";
+
+  return <SignInForm loggedOutDueToInactivity={wasLoggedOutForInactivity} />;
 }

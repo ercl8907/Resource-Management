@@ -2,12 +2,17 @@
 
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { clearLastActivity } from "@/lib/inactivity";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
 type Errors = Partial<Record<"email" | "password" | "form", string>>;
 
-export function SignInForm() {
+export function SignInForm({
+  loggedOutDueToInactivity = false,
+}: {
+  loggedOutDueToInactivity?: boolean;
+}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -105,6 +110,8 @@ export function SignInForm() {
 
       // Keep the loader up until the dashboard page mounts.
       // Replace so the browser back button skips the sign-in page.
+      // Start the inactivity clock fresh for this session.
+      clearLastActivity();
       setIsNavigating(true);
       router.replace("/dashboard");
     } catch (err) {
@@ -151,6 +158,15 @@ export function SignInForm() {
             Sign in to continue to Resource Management.
           </p>
         </div>
+
+        {loggedOutDueToInactivity && (
+          <p
+            role="status"
+            className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm font-medium text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+          >
+            Logged out due to inactivity
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} noValidate className="mt-8 space-y-5">
           {errors.form && (

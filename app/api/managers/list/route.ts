@@ -23,7 +23,8 @@ export async function GET() {
   const { data: managers, error } = await supabase
     .from("managers")
     .select("id, manager_name, user_id, created_at")
-    .order("created_at", { ascending: false });
+    .is("parent_id", null)
+    .order("created_at", { ascending: true });
 
   if (error) {
     console.error("[managers/list]", error);
@@ -36,5 +37,64 @@ export async function GET() {
     );
   }
 
-  return NextResponse.json({ managers: managers ?? [] });
+  // Count each manager's direct subcategories (managers rows whose parent_id
+  // points at it).
+  const { data: subcategories, error: subcategoriesError } = await supabase
+    .from("managers")
+    .select("parent_id")
+    .not("parent_id", "is", null);
+
+  if (subcategoriesError) {
+    console.error("[managers/list] subcategory counts", subcategoriesError);
+    return NextResponse.json(
+      {
+        error:
+          subcategoriesError.message ??
+          "Could not load managers. Please try again.",
+        detail:
+          process.env.NODE_ENV !== "production"
+            ? {
+                message: subcategoriesError.message,
+                code: subcategoriesError.code,
+              }
+            : undefined,
+      },
+      { status: 500 }
+    );
+  }
+
+  const subcategoryCounts = new Map<string, number>();
+  for (const subcategory of subcategories ?? []) {
+    if (!subcategory.parent_id) continue;
+    subcategoryCounts.set(
+      subcategory.parent_id,
+      (subcategoryCounts.get(subcategory.parent_id) ?? 0) + 1
+    );
+  }
+
+  // Count the manager_item rows attached to each manager.
+  const { data: items, error: itemsError } = await supabase
+    .from("manager_item")
+    .select("manager_id");
+
+  if (itemsError) {
+    console.error("[managers/list] item counts", itemsError);
+  }
+
+  const itemCounts = new Map<string, number>();
+  for (const item of items ?? []) {
+    if (!item.manager_id) continue;
+    itemCounts.set(
+      item.manager_id,
+      (itemCounts.get(item.manager_id) ?? 0) + 1
+    );
+  }
+
+  const managersWithCounts = (managers ?? []).map((manager) => ({
+    ...manager,
+    subcategory_count: subcategoryCounts.get(manager.id) ?? 0,
+    item_count: itemCounts.get(manager.id) ?? 0,
+  }));
+
+  return NextResponse.json({ managers: managersWithCounts });
 }

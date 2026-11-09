@@ -1,4 +1,5 @@
 import { HorizontalNav, Sidebar, TopNav } from "@/app/components/chrome";
+import { InactivityLogout } from "@/app/components/inactivity-logout";
 
 export default function DashboardLayout({
   children,
@@ -6,12 +7,15 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-full flex-1 flex-col bg-zinc-50 dark:bg-black">
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-zinc-50 dark:bg-black">
+      <InactivityLogout />
       <TopNav />
       <HorizontalNav />
-      <div className="flex flex-1">
+      <div className="flex min-h-0 flex-1">
         <Sidebar />
-        <main className="flex-1 p-6 sm:p-10">{children}</main>
+        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6 sm:p-10">
+          {children}
+        </main>
       </div>
     </div>
   );

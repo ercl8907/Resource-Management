@@ -44,15 +44,41 @@ create table if not exists public.managers (
   id uuid primary key default gen_random_uuid(),
   manager_name text not null,
   user_id uuid not null references auth.users (id) on delete cascade,
+  parent_id uuid references public.managers (id) on delete cascade,
   created_at timestamptz not null default now()
 );
 
+-- Add parent_id to installs created before subcategories existed.
+alter table public.managers
+  add column if not exists parent_id uuid references public.managers (id) on delete cascade;
+
 create index if not exists managers_user_id_idx on public.managers (user_id);
+create index if not exists managers_parent_id_idx on public.managers (parent_id);
 
 alter table public.managers enable row level security;
 
 drop policy if exists "managers_all" on public.managers;
 create policy "managers_all" on public.managers
+  for all to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- Items belong to a manager. Created from the manager detail page.
+create table if not exists public.manager_item (
+  id uuid primary key default gen_random_uuid(),
+  item_name text not null,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  manager_id uuid not null references public.managers (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists manager_item_user_id_idx on public.manager_item (user_id);
+create index if not exists manager_item_manager_id_idx on public.manager_item (manager_id);
+
+alter table public.manager_item enable row level security;
+
+drop policy if exists "manager_item_all" on public.manager_item;
+create policy "manager_item_all" on public.manager_item
   for all to authenticated
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);

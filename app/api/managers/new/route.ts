@@ -33,13 +33,47 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
 
+  const managerName = manager_name.trim();
+
+  const { data: existingManager, error: lookupError } = await supabase
+    .from("managers")
+    .select("id")
+    .eq("manager_name", managerName)
+    .is("parent_id", null)
+    .limit(1)
+    .maybeSingle();
+
+  if (lookupError) {
+    console.error("[managers/new] duplicate check", lookupError);
+    return NextResponse.json(
+      { error: "Could not create manager. Please try again." },
+      { status: 500 }
+    );
+  }
+
+  if (existingManager) {
+    return NextResponse.json(
+      { error: "Manager name already exists" },
+      { status: 409 }
+    );
+  }
+
   const { data: manager, error } = await supabase
     .from("managers")
-    .insert({ manager_name: manager_name.trim(), user_id: user.id })
+    .insert({ manager_name: managerName, user_id: user.id, parent_id: null })
     .select("id, manager_name, user_id, created_at")
     .single();
 
   if (error) {
+    // A concurrent request may have inserted the same name between the check
+    // above and this insert (unique constraint violation).
+    if (error.code === "23505") {
+      return NextResponse.json(
+        { error: "Manager name already exists" },
+        { status: 409 }
+      );
+    }
+
     console.error("[managers/new]", error);
     return NextResponse.json(
       {

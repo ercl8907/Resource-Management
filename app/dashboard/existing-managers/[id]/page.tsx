@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { AddChildForms } from "./add-child-forms";
-import { EditManagerName } from "./edit-manager-name";
+import { SubcategoryRows } from "./subcategory-rows";
 
 // The manager lookup must run before anything is sent to the browser, so this
 // route blocks instead of being prerendered with a static shell.
@@ -12,6 +12,7 @@ export const instant = false;
 type Subcategory = {
   id: string;
   manager_name: string;
+  created_at: string;
 };
 
 type Item = {
@@ -70,7 +71,7 @@ export default async function ManagerDetailPage({
   const [subcategoriesResult, itemsResult] = await Promise.all([
     supabase
       .from("managers")
-      .select("id, manager_name")
+      .select("id, manager_name, created_at")
       .eq("parent_id", manager.id)
       .order("created_at", { ascending: true }),
     supabase
@@ -88,77 +89,158 @@ export default async function ManagerDetailPage({
       "Could not load subcategories. Please try again.")
     : null;
 
-  const items: Item[] = itemsResult.error
-    ? []
-    : (itemsResult.data ?? []);
+  const items: Item[] = itemsResult.error ? [] : (itemsResult.data ?? []);
   const itemsError = itemsResult.error
     ? (itemsResult.error.message ?? "Could not load items. Please try again.")
     : null;
 
+  // Get counts of managers and items for each subcategory
+  const subcategoriesWithCounts = await Promise.all(
+    subcategories.map(async (subcategory) => {
+      const [managersResult, itemsResult] = await Promise.all([
+        supabase
+          .from("managers")
+          .select("id")
+          .eq("parent_id", subcategory.id),
+        supabase
+          .from("manager_item")
+          .select("id")
+          .eq("manager_id", subcategory.id),
+      ]);
+
+      const managersCount = managersResult?.data?.length ?? 0;
+      const itemsCount = itemsResult?.data?.length ?? 0;
+
+      return {
+        ...subcategory,
+        managersCount,
+        itemsCount,
+      };
+    })
+  );
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-6">
-      <EditManagerName
-        managerId={manager.id}
-        managerName={manager.manager_name}
-      />
+      <h1 className="text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+        {manager.manager_name}
+      </h1>
 
       <AddChildForms managerId={manager.id} />
 
-      <div className="grid min-h-0 flex-1 grid-rows-2 gap-6 sm:grid-cols-2 sm:grid-rows-1">
-        <section className="flex min-h-0 w-full flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
-          <h2 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">
-            Subcategories
-          </h2>
+      <div className="flex min-h-0 flex-1 gap-6">
+        <div className="min-h-0 w-3/4 overflow-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+          <table className="w-full border-collapse text-left text-sm">
+            <thead className="sticky top-0 z-10 bg-zinc-50 dark:bg-zinc-900">
+              <tr className="border-b border-zinc-200 dark:border-zinc-800">
+                <th scope="col" className="w-56">
+                  <button
+                    type="button"
+                    className="flex w-full cursor-pointer items-center gap-1.5 px-4 py-3 text-left text-sm font-semibold text-zinc-900 transition hover:text-zinc-950 dark:text-zinc-50 dark:hover:text-white"
+                  >
+                    Subcategory Name
+                  </button>
+                </th>
+                <th scope="col" className="w-40">
+                  <button
+                    type="button"
+                    className="flex w-full cursor-pointer items-center gap-1.5 px-4 py-3 text-left text-sm font-semibold text-zinc-900 transition hover:text-zinc-950 dark:text-zinc-50 dark:hover:text-white"
+                  >
+                    Subcategories
+                  </button>
+                </th>
+                <th scope="col" className="w-36">
+                  <button
+                    type="button"
+                    className="flex w-full cursor-pointer items-center gap-1.5 px-4 py-3 text-left text-sm font-semibold text-zinc-900 transition hover:text-zinc-950 dark:text-zinc-50 dark:hover:text-white"
+                  >
+                    Total Items
+                  </button>
+                </th>
+                <th scope="col" className="w-56">
+                  <button
+                    type="button"
+                    className="flex w-full cursor-pointer items-center gap-1.5 px-4 py-3 text-left text-sm font-semibold text-zinc-900 transition hover:text-zinc-950 dark:text-zinc-50 dark:hover:text-white"
+                  >
+                    Created At
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {subcategoriesError ? (
+                <tr className="border-b border-zinc-200 dark:border-zinc-800">
+                  <td className="px-4 py-3">
+                    <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                      Could not load manager data. Please try again.
+                    </p>
+                  </td>
+                </tr>
+              ) : subcategories.length === 0 ? (
+                <tr className="border-b border-zinc-200 dark:border-zinc-800">
+                  <td className="px-4 py-3">
+                    <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                      No subcategories found
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                <SubcategoryRows rows={subcategoriesWithCounts} />
+              )}
+            </tbody>
+          </table>
+        </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {subcategoriesError ? (
-              <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-                {subcategoriesError}
-              </p>
-            ) : subcategories.length === 0 ? (
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                No subcategories found.
-              </p>
-            ) : (
-              <ul className="list-disc space-y-2 pl-5 text-sm text-zinc-900 marker:text-zinc-400 dark:text-zinc-50 dark:marker:text-zinc-500">
-                {subcategories.map((subcategory) => (
-                  <li key={subcategory.id}>
-                    <Link
-                      href={`/dashboard/existing-managers/${encodeURIComponent(subcategory.id)}`}
-                      className="cursor-pointer font-medium underline-offset-4 hover:underline"
-                    >
-                      {subcategory.manager_name}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </section>
-
-        <section className="flex min-h-0 w-full flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
-          <h2 className="text-base font-semibold text-zinc-950 dark:text-zinc-50">
-            Items
-          </h2>
-
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {itemsError ? (
-              <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-                {itemsError}
-              </p>
-            ) : items.length === 0 ? (
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                No items found.
-              </p>
-            ) : (
-              <ul className="list-disc space-y-2 pl-5 text-sm text-zinc-900 marker:text-zinc-400 dark:text-zinc-50 dark:marker:text-zinc-500">
-                {items.map((item) => (
-                  <li key={item.id}>{item.item_name}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </section>
+        <div className="min-h-0 w-1/4 overflow-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+          <table className="w-full border-collapse text-left text-sm">
+            <thead className="sticky top-0 z-10 bg-zinc-50 dark:bg-zinc-900">
+              <tr className="border-b border-zinc-200 dark:border-zinc-800">
+                <th scope="col">
+                  <button
+                    type="button"
+                    className="flex w-full cursor-pointer items-center gap-1.5 px-4 py-3 text-left text-sm font-semibold text-zinc-900 transition hover:text-zinc-950 dark:text-zinc-50 dark:hover:text-white"
+                  >
+                    Item Name
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {itemsError ? (
+                <tr className="border-b border-zinc-200 dark:border-zinc-800">
+                  <td className="px-4 py-3">
+                    <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                      Could not load items. Please try again.
+                    </p>
+                  </td>
+                </tr>
+              ) : items.length === 0 ? (
+                <tr className="border-b border-zinc-200 dark:border-zinc-800">
+                  <td className="px-4 py-3">
+                    <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                      No items found
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                items.map((item) => (
+                  <tr
+                    key={item.id}
+                    className="border-b border-zinc-200 transition last:border-b-0 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                  >
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/dashboard/existing-managers/item/${encodeURIComponent(item.id)}`}
+                        className="font-medium text-zinc-900 underline-offset-4 transition hover:underline dark:text-zinc-50"
+                      >
+                        {item.item_name}
+                      </Link>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

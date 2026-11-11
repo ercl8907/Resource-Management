@@ -23,6 +23,21 @@ function getManagerId(pathname: string | null): string | null {
   }
 }
 
+const ITEM_DETAIL_PATH = /^\/dashboard\/existing-managers\/item\/([^/]+)\/?$/;
+
+function getItemId(pathname: string | null): string | null {
+  if (!pathname) return null;
+
+  const match = ITEM_DETAIL_PATH.exec(pathname);
+  if (!match) return null;
+
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
 type ManagerHistoryItem = {
   id: string;
   name: string;
@@ -34,7 +49,7 @@ const MANAGER_HISTORY_KEY = "resource-management:manager-history";
 // code that performs the rename and the nav live in separate module instances.
 const MANAGER_RENAMED_EVENT = "resource-management:manager-renamed";
 
-type ManagerRenamedDetail = { id: string; name: string };
+export type ManagerRenamedDetail = { id: string; name: string };
 
 function readManagerHistory(): ManagerHistoryItem[] {
   if (typeof window === "undefined") return [];
@@ -80,6 +95,33 @@ const EMPTY_MANAGER_HISTORY: ManagerHistoryItem[] = [];
 let managerHistory: ManagerHistoryItem[] = readManagerHistory();
 // Names learned from rename events before the manager is added to the trail.
 const pendingManagerNames = new Map<string, string>();
+// Item names shown in the breadcrumb, so revisiting an item renders its
+// label without waiting on the network.
+const EMPTY_ITEM_NAMES = new Map<string, string>();
+let itemNames = EMPTY_ITEM_NAMES;
+const itemNamesListeners = new Set<() => void>();
+
+function getItemNamesSnapshot() {
+  return itemNames;
+}
+
+function getItemNamesServerSnapshot() {
+  return EMPTY_ITEM_NAMES;
+}
+
+function subscribeToItemNames(listener: () => void) {
+  itemNamesListeners.add(listener);
+  return () => {
+    itemNamesListeners.delete(listener);
+  };
+}
+
+function storeItemName(id: string, name: string) {
+  if (itemNames.get(id) === name) return;
+
+  itemNames = new Map(itemNames).set(id, name);
+  itemNamesListeners.forEach((listener) => listener());
+}
 const managerHistoryListeners = new Set<() => void>();
 
 function getManagerHistorySnapshot() {
@@ -134,7 +176,7 @@ export function renameManagerInHistory(id: string, name: string) {
 
 function applyManagerRename(id: string, name: string) {
   const index = managerHistory.findIndex((item) => item.id === id);
-  if (index === -1 || managerHistory[index].name === name) return;
+  if (index === -1) return;
 
   const next = [...managerHistory];
   next[index] = { id, name };
@@ -220,11 +262,20 @@ export function Sidebar() {
 
 function HorizontalNavContent({ pathname }: { pathname: string | null }) {
   const currentManagerId = getManagerId(pathname);
+  const currentItemId = getItemId(pathname);
   const managerHistory = useSyncExternalStore(
     subscribeToManagerHistory,
     getManagerHistorySnapshot,
     getManagerHistoryServerSnapshot
   );
+  // Name of the item being viewed, appended after the manager trail.
+  const itemNames = useSyncExternalStore(
+    subscribeToItemNames,
+    getItemNamesSnapshot,
+    getItemNamesServerSnapshot
+  );
+  const currentItemName =
+    currentItemId !== null ? itemNames.get(currentItemId) : undefined;
 
   // Apply renames announced by the edit form, which may be running in a
   // different module instance than this nav.
@@ -249,16 +300,20 @@ function HorizontalNavContent({ pathname }: { pathname: string | null }) {
       window.removeEventListener(MANAGER_RENAMED_EVENT, handleManagerRenamed);
   }, []);
 
-  // The breadcrumb history belongs to the Existing Managers section. Returning
-  // to the dashboard or opening another section starts a fresh trail.
+  // The breadcrumb history belongs to the Existing Managers section. The
+  // section index (including returning to it with the browser back button) is
+  // the root of the trail, so each visit there starts a fresh one. Opening
+  // another section also clears the trail.
   useEffect(() => {
     if (pathname === null) return;
 
+    const isExistingManagersIndex =
+      pathname === "/dashboard/existing-managers";
     const inExistingManagers =
-      pathname === "/dashboard/existing-managers" ||
+      isExistingManagersIndex ||
       pathname.startsWith("/dashboard/existing-managers/");
 
-    if (!inExistingManagers) {
+    if (isExistingManagersIndex || !inExistingManagers) {
       resetManagerHistory();
     }
   }, [pathname]);
@@ -302,6 +357,41 @@ function HorizontalNavContent({ pathname }: { pathname: string | null }) {
     };
   }, [currentManagerId, managerHistory]);
 
+  // Load the name of the item being viewed. The manager trail above it is
+  // kept as-is, so the breadcrumb reads like the path taken to the item.
+  useEffect(() => {
+    if (!currentItemId) return;
+
+    const itemId = currentItemId;
+    let active = true;
+
+    async function loadItem() {
+      if (itemNames.has(itemId)) return;
+
+      try {
+        const res = await fetch(`/api/items/${encodeURIComponent(itemId)}`);
+        if (!res.ok) return;
+
+        const data = (await res.json()) as {
+          item?: { item_name?: string };
+        };
+
+        const name = data.item?.item_name;
+        if (!active || !name) return;
+
+        storeItemName(itemId, name);
+      } catch {
+        // If the name can't be loaded, the breadcrumb item is skipped.
+      }
+    }
+
+    loadItem();
+
+    return () => {
+      active = false;
+    };
+  }, [currentItemId, itemNames]);
+
   return (
     <nav
       aria-label="Dashboard sections"
@@ -311,6 +401,7 @@ function HorizontalNavContent({ pathname }: { pathname: string | null }) {
         {HORIZONTAL_ITEMS.map((item) => {
           const active =
             !currentManagerId &&
+            !currentItemId &&
             pathname !== null &&
             (pathname === item.href || pathname.startsWith(`${item.href}/`));
           return (
@@ -330,7 +421,7 @@ function HorizontalNavContent({ pathname }: { pathname: string | null }) {
             </li>
           );
         })}
-        {currentManagerId !== null &&
+        {(currentManagerId !== null || currentItemId !== null) &&
           managerHistory.map((item) => {
             const isCurrent = item.id === currentManagerId;
             return (
@@ -356,6 +447,23 @@ function HorizontalNavContent({ pathname }: { pathname: string | null }) {
               </li>
             );
           })}
+        {currentItemId !== null && currentItemName !== undefined && (
+          <li key={currentItemId} className="flex items-center">
+            <span
+              aria-hidden="true"
+              className="px-1 text-sm text-zinc-400 dark:text-zinc-500"
+            >
+              /
+            </span>
+            <Link
+              href={`/dashboard/existing-managers/item/${encodeURIComponent(currentItemId)}`}
+              aria-current="page"
+              className="block cursor-pointer whitespace-nowrap px-3 py-3 text-sm font-medium transition border-b-2 border-zinc-950 text-zinc-950 dark:border-zinc-50 dark:text-zinc-50"
+            >
+              {currentItemName}
+            </Link>
+          </li>
+        )}
       </ul>
     </nav>
   );
@@ -391,7 +499,8 @@ export function TopNav() {
       }
       // Hard-navigate so the App Router cache is discarded.
       clearLastActivity();
-      window.location.href = "/";
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- a full reload is required to drop cached authenticated routes after sign-out
+      window.location.assign("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Network error. Please try again.");
     } finally {

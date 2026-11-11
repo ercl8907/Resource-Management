@@ -28,7 +28,7 @@ function withNoStore(response: NextResponse, pathname: string) {
   return response;
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Static assets and the auth API don't need a session check.

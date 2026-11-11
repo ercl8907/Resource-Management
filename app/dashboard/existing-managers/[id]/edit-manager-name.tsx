@@ -1,8 +1,8 @@
 "use client";
 
-import { renameManagerInHistory } from "@/app/components/chrome";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent, type KeyboardEvent } from "react";
+import { useState, useLayoutEffect, type FormEvent, type KeyboardEvent } from "react";
+import type { ManagerRenamedDetail } from "@/app/components/chrome";
 
 export function EditManagerName({
   managerId,
@@ -18,6 +18,16 @@ export function EditManagerName({
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Editing the name is a transient interaction. With Cache Components,
+  // navigating away hides this page with <Activity> instead of unmounting
+  // it, so the editor would still be open when returning. Reset it
+  // whenever the page becomes hidden.
+  useLayoutEffect(() => {
+    return () => {
+      setIsEditing(false);
+    };
+  }, []);
 
   function startEditing() {
     setDraft(name);
@@ -75,9 +85,15 @@ export function EditManagerName({
 
       setName(savedName);
       setDraft(savedName);
-      renameManagerInHistory(managerId, savedName);
       setIsEditing(false);
+
       router.refresh();
+      // Tell the navs (possibly in another module instance) about the rename.
+      window.dispatchEvent(
+        new CustomEvent<ManagerRenamedDetail>("resource-management:manager-renamed", {
+          detail: { id: managerId, name: savedName },
+        })
+      );
     } catch {
       setError("Network error. Please try again.");
     } finally {

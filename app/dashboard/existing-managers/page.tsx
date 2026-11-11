@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import type { ManagerRenamedDetail } from "@/app/components/chrome";
 
 type Manager = {
   id: string;
@@ -54,12 +54,25 @@ function SortIndicator({
 }
 
 export default function ExistingManagersPage() {
-  const router = useRouter();
   const [managers, setManagers] = useState<Manager[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [editingManagerId, setEditingManagerId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState<string>("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  // The inline name editor is a transient interaction. With Cache
+  // Components, navigating away hides this page with <Activity> instead of
+  // unmounting it, so an open editor would still be shown when returning.
+  // Reset it whenever the page becomes hidden.
+  useLayoutEffect(() => {
+    return () => {
+      setEditingManagerId(null);
+      setEditingName("");
+    };
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -94,11 +107,53 @@ export default function ExistingManagersPage() {
     }
   }
 
-  function openManager(event: MouseEvent<HTMLTableRowElement>, id: string) {
-    // Let the inner link handle its own navigation (and modifier clicks).
-    if ((event.target as HTMLElement).closest("a")) return;
+  async function handleSave(id: string, newName: string) {
+    if (!newName.trim()) {
+      alert("Manager name cannot be empty");
+      return;
+    }
 
-    router.push(`/dashboard/existing-managers/${id}`);
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/managers/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ manager_name: newName.trim() }),
+      });
+
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        manager?: { manager_name?: string };
+      };
+
+      if (!res.ok) {
+        alert(data.error ?? "Failed to update manager name");
+        return;
+      }
+
+      const savedName = data.manager?.manager_name ?? newName.trim();
+
+      // Update the local state
+      setManagers((prev) =>
+        prev.map((manager) =>
+          manager.id === id ? { ...manager, manager_name: savedName } : manager
+        )
+      );
+      setEditingManagerId(null);
+      setEditingName("");
+
+      window.dispatchEvent(
+        new CustomEvent<ManagerRenamedDetail>("resource-management:manager-renamed", {
+          detail: { id, name: savedName },
+        })
+      );
+    } catch {
+      alert("Network error. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   const sortedManagers = useMemo(() => {
@@ -245,16 +300,61 @@ export default function ExistingManagersPage() {
               {sortedManagers.map((manager) => (
                 <tr
                   key={manager.id}
-                  onClick={(event) => openManager(event, manager.id)}
-                  className="cursor-pointer border-b border-zinc-200 transition last:border-b-0 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                  className="border-b border-zinc-200 transition last:border-b-0 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
                 >
                   <td className="px-4 py-3">
-                    <Link
-                      href={`/dashboard/existing-managers/${manager.id}`}
-                      className="cursor-pointer font-medium underline-offset-4 hover:underline"
-                    >
-                      {manager.manager_name}
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      {editingManagerId === manager.id ? (
+                        <>
+                          <input
+                            type="text"
+                            value={editingName}
+                            autoFocus
+                            onChange={(e) => setEditingName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                handleSave(manager.id, editingName);
+                              } else if (e.key === "Escape") {
+                                setEditingManagerId(null);
+                                setEditingName("");
+                              }
+                            }}
+                            className="rounded border border-zinc-300 bg-white px-3 py-1 text-sm font-medium outline-none ring-2 ring-zinc-400 focus:border-zinc-500 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:ring-zinc-400 dark:focus:border-zinc-500 dark:focus:ring-zinc-400"
+                          />
+                          <button
+                            type="button"
+                            disabled={isSaving}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSave(manager.id, editingName);
+                            }}
+                            className="rounded bg-zinc-100 px-3 py-1 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                          >
+                            Update
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <Link
+                            href={`/dashboard/existing-managers/${encodeURIComponent(manager.id)}`}
+                            className="font-medium text-zinc-900 underline-offset-4 transition hover:underline dark:text-zinc-50"
+                          >
+                            {manager.manager_name}
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingManagerId(manager.id);
+                              setEditingName(manager.manager_name);
+                            }}
+                            className="rounded bg-zinc-100 px-3 py-1 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                          >
+                            Edit
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
                     {manager.subcategory_count}

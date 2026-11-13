@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import type { TemplateRenamedDetail } from "@/app/components/chrome";
 
 type ItemTemplate = {
   id: string;
   template_name: string;
   user_id: string;
+  template_user_id: string;
   created_at: string;
 };
 
@@ -123,7 +125,7 @@ export default function ItemTemplatePage() {
 
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
-        template?: { template_name?: string };
+        template?: { template_name?: string; template_user_id?: string | null };
       };
 
       if (!res.ok) {
@@ -132,6 +134,10 @@ export default function ItemTemplatePage() {
       }
 
       const savedName = data.template?.template_name ?? newName.trim();
+
+      // The breadcrumb addresses templates by the id used in their URL, so
+      // announce the rename with that id.
+      const templateHrefId = data.template?.template_user_id ?? id;
 
       // Update the local state
       setTemplates((prev) =>
@@ -143,9 +149,12 @@ export default function ItemTemplatePage() {
       setEditingTemplateName("");
 
       window.dispatchEvent(
-        new CustomEvent("resource-management:template-renamed", {
-          detail: { id, name: savedName },
-        })
+        new CustomEvent<TemplateRenamedDetail>(
+          "resource-management:template-renamed",
+          {
+            detail: { id: templateHrefId, name: savedName },
+          }
+        )
       );
     } catch {
       alert("Network error. Please try again.");
@@ -360,7 +369,7 @@ export default function ItemTemplatePage() {
                       ) : (
                         <>
                               <Link
-                                href={`/dashboard/item-template/${encodeURIComponent(template.id)}`}
+                                href={`/dashboard/item-template/${encodeURIComponent(template.template_user_id ?? template.id)}`}
                                 className="font-medium text-zinc-900 underline-offset-4 transition hover:underline dark:text-zinc-50"
                               >
                                 {template.template_name}

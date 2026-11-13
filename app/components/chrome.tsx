@@ -38,6 +38,21 @@ function getItemId(pathname: string | null): string | null {
   }
 }
 
+const TEMPLATE_DETAIL_PATH = /^\/dashboard\/item-template\/([^/]+)\/?$/;
+
+function getTemplateId(pathname: string | null): string | null {
+  if (!pathname) return null;
+
+  const match = TEMPLATE_DETAIL_PATH.exec(pathname);
+  if (!match) return null;
+
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
 type ManagerHistoryItem = {
   id: string;
   name: string;
@@ -48,8 +63,10 @@ const MANAGER_HISTORY_KEY = "resource-management:manager-history";
 // Broadcast renames through the window so the breadcrumb updates even if the
 // code that performs the rename and the nav live in separate module instances.
 const MANAGER_RENAMED_EVENT = "resource-management:manager-renamed";
+const TEMPLATE_RENAMED_EVENT = "resource-management:template-renamed";
 
 export type ManagerRenamedDetail = { id: string; name: string };
+export type TemplateRenamedDetail = { id: string; name: string };
 
 function readManagerHistory(): ManagerHistoryItem[] {
   if (typeof window === "undefined") return [];
@@ -122,6 +139,35 @@ function storeItemName(id: string, name: string) {
   itemNames = new Map(itemNames).set(id, name);
   itemNamesListeners.forEach((listener) => listener());
 }
+
+// Template names shown in the breadcrumb, keyed by the id used in the URL so
+// the label is available without waiting on the network when revisiting.
+const EMPTY_TEMPLATE_NAMES = new Map<string, string>();
+let templateNames = EMPTY_TEMPLATE_NAMES;
+const templateNamesListeners = new Set<() => void>();
+
+function getTemplateNamesSnapshot() {
+  return templateNames;
+}
+
+function getTemplateNamesServerSnapshot() {
+  return EMPTY_TEMPLATE_NAMES;
+}
+
+function subscribeToTemplateNames(listener: () => void) {
+  templateNamesListeners.add(listener);
+  return () => {
+    templateNamesListeners.delete(listener);
+  };
+}
+
+function storeTemplateName(id: string, name: string) {
+  if (templateNames.get(id) === name) return;
+
+  templateNames = new Map(templateNames).set(id, name);
+  templateNamesListeners.forEach((listener) => listener());
+}
+
 const managerHistoryListeners = new Set<() => void>();
 
 function getManagerHistorySnapshot() {
@@ -249,7 +295,8 @@ function SidebarContent({ pathname }: { pathname: string | null }) {
               href="/dashboard/item-template"
               className={[
                 "block cursor-pointer rounded-lg px-3 py-2 text-sm font-medium transition",
-                pathname === "/dashboard/item-template"
+                pathname === "/dashboard/item-template" ||
+                pathname?.startsWith("/dashboard/item-template/")
                   ? "bg-zinc-950 text-white dark:bg-zinc-50 dark:text-zinc-950"
                   : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900",
               ].join(" ")}
@@ -276,6 +323,7 @@ export function Sidebar() {
 function HorizontalNavContent({ pathname }: { pathname: string | null }) {
   const currentManagerId = getManagerId(pathname);
   const currentItemId = getItemId(pathname);
+  const currentTemplateId = getTemplateId(pathname);
   const managerHistory = useSyncExternalStore(
     subscribeToManagerHistory,
     getManagerHistorySnapshot,
@@ -289,6 +337,16 @@ function HorizontalNavContent({ pathname }: { pathname: string | null }) {
   );
   const currentItemName =
     currentItemId !== null ? itemNames.get(currentItemId) : undefined;
+  // Name of the item template being viewed.
+  const templateNames = useSyncExternalStore(
+    subscribeToTemplateNames,
+    getTemplateNamesSnapshot,
+    getTemplateNamesServerSnapshot
+  );
+  const currentTemplateName =
+    currentTemplateId !== null
+      ? templateNames.get(currentTemplateId)
+      : undefined;
 
   // Apply renames announced by the edit form, which may be running in a
   // different module instance than this nav.
@@ -311,6 +369,27 @@ function HorizontalNavContent({ pathname }: { pathname: string | null }) {
     window.addEventListener(MANAGER_RENAMED_EVENT, handleManagerRenamed);
     return () =>
       window.removeEventListener(MANAGER_RENAMED_EVENT, handleManagerRenamed);
+  }, []);
+
+  // Keep the template breadcrumb label in sync when a template is renamed.
+  useEffect(() => {
+    function handleTemplateRenamed(event: Event) {
+      const detail = (event as CustomEvent<TemplateRenamedDetail>).detail;
+
+      if (
+        !detail ||
+        typeof detail.id !== "string" ||
+        typeof detail.name !== "string"
+      ) {
+        return;
+      }
+
+      storeTemplateName(detail.id, detail.name);
+    }
+
+    window.addEventListener(TEMPLATE_RENAMED_EVENT, handleTemplateRenamed);
+    return () =>
+      window.removeEventListener(TEMPLATE_RENAMED_EVENT, handleTemplateRenamed);
   }, []);
 
   // The breadcrumb history belongs to the Existing Managers section. The
@@ -405,6 +484,43 @@ function HorizontalNavContent({ pathname }: { pathname: string | null }) {
     };
   }, [currentItemId, itemNames]);
 
+  // Load the name of the template being viewed so it can be shown in the
+  // breadcrumb in place of the section link.
+  useEffect(() => {
+    if (!currentTemplateId) return;
+
+    const templateId = currentTemplateId;
+    let active = true;
+
+    async function loadTemplate() {
+      if (templateNames.has(templateId)) return;
+
+      try {
+        const res = await fetch(
+          `/api/item-templates/${encodeURIComponent(templateId)}`
+        );
+        if (!res.ok) return;
+
+        const data = (await res.json()) as {
+          template?: { template_name?: string };
+        };
+
+        const name = data.template?.template_name;
+        if (!active || !name) return;
+
+        storeTemplateName(templateId, name);
+      } catch {
+        // If the name can't be loaded, the breadcrumb item is skipped.
+      }
+    }
+
+    loadTemplate();
+
+    return () => {
+      active = false;
+    };
+  }, [currentTemplateId, templateNames]);
+
   return (
     <nav
       aria-label="Dashboard sections"
@@ -415,6 +531,7 @@ function HorizontalNavContent({ pathname }: { pathname: string | null }) {
           const active =
             !currentManagerId &&
             !currentItemId &&
+            !currentTemplateId &&
             pathname !== null &&
             (pathname === item.href || pathname.startsWith(`${item.href}/`));
           return (
@@ -474,6 +591,23 @@ function HorizontalNavContent({ pathname }: { pathname: string | null }) {
               className="block cursor-pointer whitespace-nowrap px-3 py-3 text-sm font-medium transition border-b-2 border-zinc-950 text-zinc-950 dark:border-zinc-50 dark:text-zinc-50"
             >
               {currentItemName}
+            </Link>
+          </li>
+        )}
+        {currentTemplateId !== null && currentTemplateName !== undefined && (
+          <li key={currentTemplateId} className="flex items-center">
+            <span
+              aria-hidden="true"
+              className="px-1 text-sm text-zinc-400 dark:text-zinc-500"
+            >
+              /
+            </span>
+            <Link
+              href={`/dashboard/item-template/${encodeURIComponent(currentTemplateId)}`}
+              aria-current="page"
+              className="block cursor-pointer whitespace-nowrap px-3 py-3 text-sm font-medium transition border-b-2 border-zinc-950 text-zinc-950 dark:border-zinc-50 dark:text-zinc-50"
+            >
+              {currentTemplateName}
             </Link>
           </li>
         )}

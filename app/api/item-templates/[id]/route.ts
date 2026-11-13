@@ -1,6 +1,65 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+
+  let supabase;
+  try {
+    supabase = await createClient();
+  } catch {
+    return NextResponse.json(
+      { error: "Server is not configured. Check Supabase env vars in .env.local." },
+      { status: 500 }
+    );
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  }
+
+  // Match either the user-facing id or the internal id so the breadcrumb can
+  // still resolve templates that don't have a template_user_id yet.
+  const [templateByUserTemplateId, templateByInternalId] = await Promise.all([
+    supabase
+      .from("item_template")
+      .select("id, template_name, template_user_id")
+      .eq("template_user_id", id)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("item_template")
+      .select("id, template_name, template_user_id")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+  ]);
+
+  const template = templateByUserTemplateId.data ?? templateByInternalId.data;
+  const error = templateByUserTemplateId.error ?? templateByInternalId.error;
+
+  if (error) {
+    console.error("[item-templates/[id]]", error);
+    return NextResponse.json(
+      { error: error.message ?? "Could not load template. Please try again." },
+      { status: 500 }
+    );
+  }
+
+  if (!template) {
+    return NextResponse.json({ error: "Template not found." }, { status: 404 });
+  }
+
+  return NextResponse.json({ template });
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -43,7 +102,7 @@ export async function PATCH(
 
   const { data: template, error: lookupError } = await supabase
     .from("item_template")
-    .select("id, template_name")
+    .select("id, template_name, template_user_id")
     .eq("id", id)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -64,7 +123,11 @@ export async function PATCH(
 
   if (templateName === template.template_name) {
     return NextResponse.json({
-      template: { id: template.id, template_name: template.template_name },
+      template: {
+        id: template.id,
+        template_name: template.template_name,
+        template_user_id: template.template_user_id,
+      },
     });
   }
 
@@ -97,7 +160,7 @@ export async function PATCH(
     .update({ template_name: templateName })
     .eq("id", id)
     .eq("user_id", user.id)
-    .select("id, template_name")
+    .select("id, template_name, template_user_id")
     .single();
 
   if (updateError) {

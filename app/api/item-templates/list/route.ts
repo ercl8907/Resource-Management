@@ -22,7 +22,7 @@ export async function GET() {
 
   const { data: templates, error } = await supabase
     .from("item_template")
-    .select("id, template_name, user_id, created_at")
+    .select("id, template_name, user_id, template_user_id, created_at")
     .order("created_at", { ascending: true });
 
   if (error) {

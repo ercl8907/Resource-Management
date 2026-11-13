@@ -64,7 +64,7 @@ export async function POST(request: Request) {
   const { data: template, error } = await supabase
     .from("item_template")
     .insert({ template_name: templateName, user_id: user.id })
-    .select("id, template_name, user_id, created_at")
+    .select("id, template_name, user_id, template_user_id, created_at")
     .single();
 
   if (error) {

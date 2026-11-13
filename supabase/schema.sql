@@ -82,3 +82,21 @@ create policy "manager_item_all" on public.manager_item
   for all to authenticated
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+-- Item templates. Created from the item-template page.
+create table if not exists public.item_template (
+  id uuid primary key default gen_random_uuid(),
+  template_name text not null,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists item_template_user_id_idx on public.item_template (user_id);
+
+alter table public.item_template enable row level security;
+
+drop policy if exists "item_template_all" on public.item_template;
+create policy "item_template_all" on public.item_template
+  for all to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);

@@ -1,8 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { AddChildForms } from "./add-child-forms";
+import { ItemRows } from "./item-rows";
 import { SubcategoryRows } from "./subcategory-rows";
 
 // The manager lookup must run before anything is sent to the browser, so this
@@ -12,12 +12,14 @@ export const instant = false;
 type Subcategory = {
   id: string;
   manager_name: string;
+  user_manager_id: string;
   created_at: string;
 };
 
 type Item = {
   id: string;
   item_name: string;
+  user_item_id: string | null;
 };
 
 export default async function ManagerDetailPage({
@@ -51,7 +53,7 @@ export default async function ManagerDetailPage({
   const { data: manager, error: managerError } = await supabase
     .from("managers")
     .select("id, manager_name")
-    .eq("id", id)
+    .eq("user_manager_id", id)
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -71,12 +73,12 @@ export default async function ManagerDetailPage({
   const [subcategoriesResult, itemsResult] = await Promise.all([
     supabase
       .from("managers")
-      .select("id, manager_name, created_at")
+      .select("id, manager_name, user_manager_id, created_at")
       .eq("parent_id", manager.id)
       .order("created_at", { ascending: true }),
     supabase
       .from("manager_item")
-      .select("id, item_name")
+      .select("id, item_name, user_item_id")
       .eq("manager_id", manager.id)
       .order("created_at", { ascending: true }),
   ]);
@@ -222,21 +224,7 @@ export default async function ManagerDetailPage({
                   </td>
                 </tr>
               ) : (
-                items.map((item) => (
-                  <tr
-                    key={item.id}
-                    className="border-b border-zinc-200 transition last:border-b-0 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
-                  >
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/dashboard/existing-managers/item/${encodeURIComponent(item.id)}`}
-                        className="font-medium text-zinc-900 underline-offset-4 transition hover:underline dark:text-zinc-50"
-                      >
-                        {item.item_name}
-                      </Link>
-                    </td>
-                  </tr>
-                ))
+                <ItemRows rows={items} />
               )}
             </tbody>
           </table>

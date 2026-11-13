@@ -35,12 +35,26 @@ export default async function ItemDetailPage({
     redirect("/");
   }
 
-  const { data: item, error: itemError } = await supabase
-    .from("manager_item")
-    .select("id, item_name, manager_id")
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  // Items are addressed by their user-facing id, but older rows (or rows
+  // created before that column was populated) may not have one. Look up both
+  // so links that fall back to the internal id still resolve.
+  const [itemByUserItemId, itemByInternalId] = await Promise.all([
+    supabase
+      .from("manager_item")
+      .select("id, item_name, manager_id")
+      .eq("user_item_id", id)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("manager_item")
+      .select("id, item_name, manager_id")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+  ]);
+
+  const item = itemByUserItemId.data ?? itemByInternalId.data;
+  const itemError = itemByUserItemId.error ?? itemByInternalId.error;
 
   if (itemError) {
     return (
@@ -57,7 +71,7 @@ export default async function ItemDetailPage({
 
   const { data: manager } = await supabase
     .from("managers")
-    .select("id, manager_name")
+    .select("user_manager_id, manager_name")
     .eq("id", item.manager_id)
     .maybeSingle();
 
@@ -71,7 +85,7 @@ export default async function ItemDetailPage({
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
             Item in{" "}
             <Link
-              href={`/dashboard/existing-managers/${encodeURIComponent(manager.id)}`}
+              href={`/dashboard/existing-managers/${encodeURIComponent(manager.user_manager_id)}`}
               className="font-medium text-zinc-900 underline-offset-4 transition hover:underline dark:text-zinc-50"
             >
               {manager.manager_name}

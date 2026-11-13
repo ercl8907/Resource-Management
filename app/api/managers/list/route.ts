@@ -22,7 +22,7 @@ export async function GET() {
 
   const { data: managers, error } = await supabase
     .from("managers")
-    .select("id, manager_name, user_id, created_at")
+    .select("id, manager_name, user_id, user_manager_id, created_at")
     .is("parent_id", null)
     .order("created_at", { ascending: true });
 
@@ -94,6 +94,7 @@ export async function GET() {
     ...manager,
     subcategory_count: subcategoryCounts.get(manager.id) ?? 0,
     item_count: itemCounts.get(manager.id) ?? 0,
+    user_manager_id: manager.user_manager_id,
   }));
 
   return NextResponse.json({ managers: managersWithCounts });

@@ -27,8 +27,9 @@ export async function GET(
 
   const { data: manager, error } = await supabase
     .from("managers")
-    .select("id, manager_name")
-    .eq("id", id)
+    .select("id, manager_name, user_manager_id")
+    .eq("user_manager_id", id)
+    .eq("user_id", user.id)
     .maybeSingle();
 
   if (error) {

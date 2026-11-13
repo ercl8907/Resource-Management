@@ -244,6 +244,19 @@ function SidebarContent({ pathname }: { pathname: string | null }) {
               Existing Managers
             </Link>
           </li>
+          <li>
+            <Link
+              href="/dashboard/item-template"
+              className={[
+                "block cursor-pointer rounded-lg px-3 py-2 text-sm font-medium transition",
+                pathname === "/dashboard/item-template"
+                  ? "bg-zinc-950 text-white dark:bg-zinc-50 dark:text-zinc-950"
+                  : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900",
+              ].join(" ")}
+            >
+              Item Templates
+            </Link>
+          </li>
         </ul>
       </nav>
     </aside>

@@ -8,6 +8,7 @@ import type { ManagerRenamedDetail } from "@/app/components/chrome";
 export type SubcategoryRow = {
   id: string;
   manager_name: string;
+  user_manager_id: string;
   created_at: string;
   managersCount: number;
   itemsCount: number;
@@ -152,7 +153,7 @@ export function SubcategoryRows({ rows }: { rows: SubcategoryRow[] }) {
                 ) : (
                   <>
                     <Link
-                      href={`/dashboard/existing-managers/${encodeURIComponent(row.id)}`}
+                      href={`/dashboard/existing-managers/${encodeURIComponent(row.user_manager_id)}`}
                       className="font-medium text-zinc-900 underline-offset-4 transition hover:underline dark:text-zinc-50"
                     >
                       {row.manager_name}

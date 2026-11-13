@@ -8,6 +8,7 @@ type Manager = {
   id: string;
   manager_name: string;
   user_id: string;
+  user_manager_id: string;
   created_at: string;
   subcategory_count: number;
   item_count: number;
@@ -336,7 +337,7 @@ export default function ExistingManagersPage() {
                       ) : (
                         <>
                           <Link
-                            href={`/dashboard/existing-managers/${encodeURIComponent(manager.id)}`}
+                            href={`/dashboard/existing-managers/${encodeURIComponent(manager.user_manager_id)}`}
                             className="font-medium text-zinc-900 underline-offset-4 transition hover:underline dark:text-zinc-50"
                           >
                             {manager.manager_name}

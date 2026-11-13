@@ -1,13 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-type ItemTemplate = {
-  id: string;
-  template_name: string;
-  user_id: string;
-  created_at: string;
-};
-
 export async function GET() {
   let supabase;
   try {

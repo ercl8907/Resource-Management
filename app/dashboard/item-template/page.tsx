@@ -171,7 +171,10 @@ export default function ItemTemplatePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ template_name: templateName.trim() }),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        template?: ItemTemplate;
+      };
 
       if (!res.ok) {
         setError(data.error ?? "Could not create template. Please try again.");
@@ -180,9 +183,11 @@ export default function ItemTemplatePage() {
 
       setSuccess(true);
       setTemplateName("");
-      // Refresh templates to include the new one
-      const updatedTemplates = [...templates, { id: data.id, template_name: templateName.trim(), user_id: data.user_id, created_at: data.created_at }];
-      setTemplates(updatedTemplates);
+      // Add the new template to the list without a full refetch.
+      if (data.template) {
+        const created = data.template;
+        setTemplates((prev) => [...prev, created]);
+      }
     } catch {
       setError("Network error. Please try again.");
     } finally {

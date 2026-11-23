@@ -22,7 +22,7 @@ export async function GET() {
 
   const { data: managers, error } = await supabase
     .from("managers")
-    .select("id, manager_name, user_id, user_manager_id, created_at")
+    .select("id, manager_name, user_id, user_manager_id, item_template_id, created_at")
     .is("parent_id", null)
     .order("created_at", { ascending: true });
 
@@ -35,6 +35,23 @@ export async function GET() {
       },
       { status: 500 }
     );
+  }
+
+  // Resolve each manager's item_template_id (the template's user-facing id)
+  // to its display name, scoped to the signed-in user's templates.
+  const { data: templates, error: templatesError } = await supabase
+    .from("item_template")
+    .select("template_user_id, template_name")
+    .eq("user_id", user.id);
+
+  if (templatesError) {
+    console.error("[managers/list] template names", templatesError);
+  }
+
+  const templateNames = new Map<string, string>();
+  for (const template of templates ?? []) {
+    if (!template.template_user_id) continue;
+    templateNames.set(template.template_user_id, template.template_name);
   }
 
   // Count each manager's direct subcategories (managers rows whose parent_id
@@ -95,6 +112,9 @@ export async function GET() {
     subcategory_count: subcategoryCounts.get(manager.id) ?? 0,
     item_count: itemCounts.get(manager.id) ?? 0,
     user_manager_id: manager.user_manager_id,
+    template_name: manager.item_template_id
+      ? (templateNames.get(manager.item_template_id) ?? "—")
+      : "—",
   }));
 
   return NextResponse.json({ managers: managersWithCounts });

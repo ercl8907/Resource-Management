@@ -9,10 +9,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const { manager_name } = (body ?? {}) as { manager_name?: unknown };
+  const { manager_name, item_template_id } = (body ?? {}) as {
+    manager_name?: unknown;
+    item_template_id?: unknown;
+  };
 
   if (typeof manager_name !== "string" || !manager_name.trim()) {
     return NextResponse.json({ error: "Please enter a manager name." }, { status: 400 });
+  }
+
+  if (typeof item_template_id !== "string" || !item_template_id.trim()) {
+    return NextResponse.json(
+      { error: "Please select an item template." },
+      { status: 400 }
+    );
   }
 
   let supabase;
@@ -34,6 +44,28 @@ export async function POST(request: Request) {
   }
 
   const managerName = manager_name.trim();
+  const templateId = item_template_id.trim();
+
+  // Verify the selected template belongs to the signed-in user before storing
+  // it on the manager.
+  const { data: template, error: templateError } = await supabase
+    .from("item_template")
+    .select("template_user_id")
+    .eq("template_user_id", templateId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (templateError) {
+    console.error("[managers/new] template lookup", templateError);
+    return NextResponse.json(
+      { error: "Could not verify the item template. Please try again." },
+      { status: 500 }
+    );
+  }
+
+  if (!template) {
+    return NextResponse.json({ error: "Item template not found." }, { status: 404 });
+  }
 
   const { data: existingManager, error: lookupError } = await supabase
     .from("managers")
@@ -60,8 +92,13 @@ export async function POST(request: Request) {
 
   const { data: manager, error } = await supabase
     .from("managers")
-    .insert({ manager_name: managerName, user_id: user.id, parent_id: null })
-    .select("id, manager_name, user_id, created_at")
+    .insert({
+      manager_name: managerName,
+      user_id: user.id,
+      parent_id: null,
+      item_template_id: templateId,
+    })
+    .select("id, manager_name, item_template_id, user_id, created_at")
     .single();
 
   if (error) {

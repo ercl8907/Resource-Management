@@ -9,6 +9,7 @@ type Manager = {
   manager_name: string;
   user_id: string;
   user_manager_id: string;
+  template_name: string;
   created_at: string;
   subcategory_count: number;
   item_count: number;
@@ -16,6 +17,7 @@ type Manager = {
 
 type SortKey =
   | "manager_name"
+  | "template_name"
   | "created_at"
   | "subcategory_count"
   | "item_count";
@@ -165,6 +167,10 @@ export default function ExistingManagersPage() {
         result = a.manager_name.localeCompare(b.manager_name, undefined, {
           sensitivity: "base",
         });
+      } else if (sortKey === "template_name") {
+        result = a.template_name.localeCompare(b.template_name, undefined, {
+          sensitivity: "base",
+        });
       } else if (sortKey === "created_at") {
         result =
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
@@ -222,6 +228,28 @@ export default function ExistingManagersPage() {
                     Manager Name
                     <SortIndicator
                       active={sortKey === "manager_name"}
+                      direction={sortDirection}
+                    />
+                  </button>
+                </th>
+                <th
+                  scope="col"
+                  aria-sort={
+                    sortKey === "template_name"
+                      ? sortDirection === "asc"
+                        ? "ascending"
+                        : "descending"
+                      : "none"
+                  }
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleSort("template_name")}
+                    className={headerButtonClass}
+                  >
+                    Template Name
+                    <SortIndicator
+                      active={sortKey === "template_name"}
                       direction={sortDirection}
                     />
                   </button>
@@ -356,6 +384,9 @@ export default function ExistingManagersPage() {
                         </>
                       )}
                     </div>
+                  </td>
+                  <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                    {manager.template_name}
                   </td>
                   <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
                     {manager.subcategory_count}

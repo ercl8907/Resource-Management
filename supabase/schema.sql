@@ -93,10 +93,42 @@ create table if not exists public.item_template (
 
 create index if not exists item_template_user_id_idx on public.item_template (user_id);
 
+-- Managers are created with an item template, which the new-manager form and
+-- API both require.
+alter table public.managers
+  add column if not exists item_template_id uuid references public.item_template (id) on delete restrict;
+create index if not exists managers_item_template_id_idx on public.managers (item_template_id);
+
 alter table public.item_template enable row level security;
 
 drop policy if exists "item_template_all" on public.item_template;
 create policy "item_template_all" on public.item_template
+  for all to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- Variables attached to an item template. Created from the template detail page.
+create table if not exists public.item_template_variables (
+  id uuid primary key default gen_random_uuid(),
+  variable_name text not null,
+  variable_length integer not null,
+  item_template_id uuid not null references public.item_template (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists item_template_variables_item_template_id_idx
+  on public.item_template_variables (item_template_id);
+create index if not exists item_template_variables_user_id_idx
+  on public.item_template_variables (user_id);
+
+alter table public.item_template_variables enable row level security;
+
+-- The deployed table may already have a SELECT-only policy; this replaces it
+-- so authenticated users can insert their own variables from the detail page.
+drop policy if exists "item_template_variables_select" on public.item_template_variables;
+drop policy if exists "item_template_variables_all" on public.item_template_variables;
+create policy "item_template_variables_all" on public.item_template_variables
   for all to authenticated
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);

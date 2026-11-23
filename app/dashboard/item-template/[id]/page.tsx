@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { connection, revalidatePath } from "next/server";
+import { connection } from "next/server";
+import { revalidatePath } from "next/cache";
 
 // The template lookup must run before anything is sent to the browser, so this
 // route blocks instead of being prerendered with a static shell.

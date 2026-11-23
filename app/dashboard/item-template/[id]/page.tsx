@@ -20,6 +20,8 @@ function formatDateTime(value: string) {
 }
 
 async function addPropertyField(formData: FormData) {
+  "use server";
+
   const propertyName = (formData.get("propertyName") as string | null)?.trim();
   const propertyLength = (formData.get("propertyLength") as string | null)?.trim();
   const templateId = formData.get("templateId") as string | null;

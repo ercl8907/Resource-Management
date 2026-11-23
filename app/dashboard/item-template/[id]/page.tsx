@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { connection } from "next/server";
+import { connection, revalidatePath } from "next/server";
 
 // The template lookup must run before anything is sent to the browser, so this
 // route blocks instead of being prerendered with a static shell.
@@ -17,6 +17,40 @@ function formatDateTime(value: string) {
     `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
     `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`,
   ].join(" ");
+}
+
+async function addPropertyField(formData: FormData) {
+  const propertyName = (formData.get("propertyName") as string | null)?.trim();
+  const propertyLength = (formData.get("propertyLength") as string | null)?.trim();
+  const templateId = formData.get("templateId") as string | null;
+
+  if (!propertyName || !propertyLength || !templateId) {
+    return;
+  }
+
+  let supabase;
+  try {
+    supabase = await createClient();
+  } catch {
+    return;
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/");
+  }
+
+  await supabase.from("item_template_variables").insert({
+    variable_name: propertyName,
+    variable_length: propertyLength,
+    item_template_id: templateId,
+    user_id: user.id,
+  });
+
+  revalidatePath("/dashboard/item-template/[id]", "page");
 }
 
 export default async function ItemTemplateDetailPage({
@@ -96,7 +130,8 @@ export default async function ItemTemplateDetailPage({
         </h1>
       </div>
 
-      <form className="max-w-md">
+      <form action={addPropertyField} className="max-w-md">
+        <input type="hidden" name="templateId" value={template.id} />
         <label htmlFor="propertyName" className="mb-1.5 block text-sm font-medium text-zinc-900 dark:text-zinc-50">
           Property Name
         </label>
@@ -105,6 +140,7 @@ export default async function ItemTemplateDetailPage({
           name="propertyName"
           type="text"
           placeholder="e.g. Quantity"
+          required
           className="w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 outline-none transition focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-zinc-50 dark:focus:ring-zinc-50 mb-4"
         />
         <label htmlFor="propertyLength" className="mb-1.5 block text-sm font-medium text-zinc-900 dark:text-zinc-50">
@@ -115,6 +151,7 @@ export default async function ItemTemplateDetailPage({
           name="propertyLength"
           type="text"
           placeholder="e.g. 10"
+          required
           className="w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 outline-none transition focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-zinc-50 dark:focus:ring-zinc-50"
         />
         <button

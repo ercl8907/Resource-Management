@@ -68,6 +68,13 @@ export default async function ItemTemplateDetailPage({
   const template = templateByUserTemplateId.data ?? templateByInternalId.data;
   const templateError = templateByUserTemplateId.error ?? templateByInternalId.error;
 
+  // Fetch variables for the template
+  const { data: variables, error: variablesError } = await supabase
+    .from("item_template_variables")
+    .select("*")
+    .eq("item_template_id", template?.id)
+    .eq("user_id", user.id);
+
   if (templateError) {
     return (
       <p role="alert" className="text-sm text-red-600 dark:text-red-400">
@@ -87,17 +94,69 @@ export default async function ItemTemplateDetailPage({
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
           {template.template_name}
         </h1>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Item template created {formatDateTime(template.created_at)}
-        </p>
       </div>
 
-      <Link
-        href="/dashboard/item-template"
-        className="w-fit text-sm font-medium text-zinc-900 underline-offset-4 transition hover:underline dark:text-zinc-50"
-      >
-        ← Back to item templates
-      </Link>
+      <form className="max-w-md">
+        <label htmlFor="propertyName" className="mb-1.5 block text-sm font-medium text-zinc-900 dark:text-zinc-50">
+          Property Name
+        </label>
+        <input
+          id="propertyName"
+          name="propertyName"
+          type="text"
+          placeholder="e.g. Quantity"
+          className="w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 outline-none transition focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-zinc-50 dark:focus:ring-zinc-50 mb-4"
+        />
+        <label htmlFor="propertyLength" className="mb-1.5 block text-sm font-medium text-zinc-900 dark:text-zinc-50">
+          Property Length
+        </label>
+        <input
+          id="propertyLength"
+          name="propertyLength"
+          type="text"
+          placeholder="e.g. 10"
+          className="w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 outline-none transition focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-zinc-50 dark:focus:ring-zinc-50"
+        />
+        <button
+          type="submit"
+          className="mt-4 w-full cursor-pointer rounded-lg bg-zinc-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+        >
+          Add Property Field
+        </button>
+      </form>
+
+      <div className="mt-6 flex flex-col gap-2">
+        <h2 className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+          Template Variables
+        </h2>
+        <div className="overflow-x-auto">
+          <table className="w-full rounded-lg border border-zinc-300 bg-white text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50">
+            <thead className="bg-zinc-100 dark:bg-zinc-800">
+              <tr>
+                <th className="w-1/3 px-4 py-2 text-left font-semibold">Variable Name</th>
+                <th className="w-1/3 px-4 py-2 text-left font-semibold">Value</th>
+                <th className="w-1/3 px-4 py-2 text-left font-semibold">Created At</th>
+              </tr>
+            </thead>
+            <tbody>
+              {variables?.map((variable) => (
+                <tr key={variable.id} className="border-t border-zinc-300 dark:border-zinc-700">
+                  <td className="px-4 py-2">{variable.variable_name}</td>
+                  <td className="px-4 py-2">{variable.variable_value}</td>
+                  <td className="px-4 py-2">{formatDateTime(variable.created_at)}</td>
+                </tr>
+              ))}
+              {(!variables || variables.length === 0) && (
+                <tr>
+                  <td colSpan={3} className="px-4 py-2 text-center text-zinc-500">
+                    No variables found
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

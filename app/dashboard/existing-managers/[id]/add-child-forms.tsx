@@ -1,12 +1,22 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+
+type ItemTemplate = {
+  template_user_id: string;
+  template_name: string;
+};
 
 export function AddChildForms({ managerId }: { managerId: string }) {
   const router = useRouter();
 
   const [subcategoryName, setSubcategoryName] = useState("");
+  const [selectedItemTemplateId, setSelectedItemTemplateId] = useState("");
+  const [templates, setTemplates] = useState<ItemTemplate[]>([]);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(true);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+  const [templateSelectionError, setTemplateSelectionError] = useState<string | null>(null);
   const [subcategoryError, setSubcategoryError] = useState<string | null>(null);
   const [subcategorySuccess, setSubcategorySuccess] = useState(false);
   const [isAddingSubcategory, setIsAddingSubcategory] = useState(false);
@@ -16,13 +26,43 @@ export function AddChildForms({ managerId }: { managerId: string }) {
   const [itemSuccess, setItemSuccess] = useState(false);
   const [isAddingItem, setIsAddingItem] = useState(false);
 
+  useEffect(() => {
+    async function loadTemplates() {
+      setIsLoadingTemplates(true);
+      setTemplateError(null);
+      try {
+        const res = await fetch("/api/item-templates/list");
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          templates?: ItemTemplate[];
+        };
+        if (!res.ok) {
+          setTemplateError(data.error ?? "Could not load item templates.");
+          return;
+        }
+        setTemplates(data.templates ?? []);
+      } catch {
+        setTemplateError("Network error. Please try again.");
+      } finally {
+        setIsLoadingTemplates(false);
+      }
+    }
+    loadTemplates();
+  }, []);
+
   async function handleAddSubcategory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubcategoryError(null);
+    setTemplateSelectionError(null);
     setSubcategorySuccess(false);
 
     if (!subcategoryName.trim()) {
       setSubcategoryError("Please enter a subcategory name.");
+      return;
+    }
+
+    if (!selectedItemTemplateId) {
+      setTemplateSelectionError("Please select an item template.");
       return;
     }
 
@@ -34,7 +74,10 @@ export function AddChildForms({ managerId }: { managerId: string }) {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ manager_name: subcategoryName.trim() }),
+          body: JSON.stringify({
+            manager_name: subcategoryName.trim(),
+            item_template_id: selectedItemTemplateId,
+          }),
         }
       );
       const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -47,6 +90,7 @@ export function AddChildForms({ managerId }: { managerId: string }) {
       }
 
       setSubcategoryName("");
+      setSelectedItemTemplateId("");
       setSubcategorySuccess(true);
       router.refresh();
     } catch {
@@ -96,6 +140,8 @@ export function AddChildForms({ managerId }: { managerId: string }) {
 
   const inputClass =
     "w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 outline-none transition focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-zinc-50 dark:focus:ring-zinc-50";
+  const selectClass =
+    "w-full cursor-pointer rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-zinc-50 dark:focus:ring-zinc-50";
 
   return (
     <div className="grid gap-6 sm:grid-cols-2">
@@ -125,6 +171,47 @@ export function AddChildForms({ managerId }: { managerId: string }) {
             aria-invalid={Boolean(subcategoryError)}
             className={inputClass}
           />
+        </div>
+
+        <div>
+          <label
+            htmlFor="subcategoryItemTemplate"
+            className="mb-1.5 block text-sm font-medium text-zinc-900 dark:text-zinc-50"
+          >
+            Item Template to Use
+          </label>
+          <select
+            id="subcategoryItemTemplate"
+            name="subcategoryItemTemplate"
+            value={selectedItemTemplateId}
+            onChange={(event) => {
+              setSelectedItemTemplateId(event.target.value);
+              setTemplateSelectionError(null);
+            }}
+            required
+            disabled={isLoadingTemplates}
+            aria-invalid={Boolean(templateError || templateSelectionError)}
+            className={selectClass}
+          >
+            <option value="">
+              {isLoadingTemplates ? "Loading templates..." : "Select an item template"}
+            </option>
+            {templates.map((template) => (
+              <option key={template.template_user_id} value={template.template_user_id}>
+                {template.template_name}
+              </option>
+            ))}
+          </select>
+          {templateError && (
+            <p role="alert" className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+              {templateError}
+            </p>
+          )}
+          {templateSelectionError && (
+            <p role="alert" className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+              {templateSelectionError}
+            </p>
+          )}
         </div>
 
         {subcategoryError && (

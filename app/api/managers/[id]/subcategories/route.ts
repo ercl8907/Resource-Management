@@ -14,11 +14,21 @@ export async function POST(
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const { manager_name } = (body ?? {}) as { manager_name?: unknown };
+  const { manager_name, item_template_id } = (body ?? {}) as {
+    manager_name?: unknown;
+    item_template_id?: unknown;
+  };
 
   if (typeof manager_name !== "string" || !manager_name.trim()) {
     return NextResponse.json(
       { error: "Please enter a subcategory name." },
+      { status: 400 }
+    );
+  }
+
+  if (typeof item_template_id !== "string" || !item_template_id.trim()) {
+    return NextResponse.json(
+      { error: "Please select an item template." },
       { status: 400 }
     );
   }
@@ -59,6 +69,26 @@ export async function POST(
     return NextResponse.json({ error: "Manager not found." }, { status: 404 });
   }
 
+  const templateId = item_template_id.trim();
+  const { data: template, error: templateError } = await supabase
+    .from("item_template")
+    .select("template_user_id")
+    .eq("template_user_id", templateId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (templateError) {
+    console.error("[managers/[id]/subcategories] template lookup", templateError);
+    return NextResponse.json(
+      { error: "Could not verify the item template. Please try again." },
+      { status: 500 }
+    );
+  }
+
+  if (!template) {
+    return NextResponse.json({ error: "Item template not found." }, { status: 404 });
+  }
+
   const subcategoryName = manager_name.trim();
 
   const { data: existing, error: lookupError } = await supabase
@@ -90,8 +120,9 @@ export async function POST(
       manager_name: subcategoryName,
       user_id: user.id,
       parent_id: id,
+      item_template_id: templateId,
     })
-    .select("id, manager_name, parent_id, user_id, created_at")
+    .select("id, manager_name, parent_id, item_template_id, user_id, created_at")
     .single();
 
   if (error) {

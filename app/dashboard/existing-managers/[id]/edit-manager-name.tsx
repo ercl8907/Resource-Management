@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useLayoutEffect, type FormEvent, type KeyboardEvent } from "react";
+import { useState, useLayoutEffect, type FocusEvent, type FormEvent, type KeyboardEvent } from "react";
 import type { ManagerRenamedDetail } from "@/app/components/chrome";
 
 export function EditManagerName({
@@ -107,6 +107,15 @@ export function EditManagerName({
     }
   }
 
+  // Keep editing while focus stays within the input/Edit Name pair, but
+  // discard the in-progress value as soon as focus leaves that pair.
+  function handleBlur(event: FocusEvent<HTMLInputElement>) {
+    const nextFocused = event.relatedTarget as Node | null;
+    if (!nextFocused || !event.currentTarget.parentElement?.contains(nextFocused)) {
+      cancelEditing();
+    }
+  }
+
   if (isEditing) {
     return (
       <form
@@ -124,6 +133,7 @@ export function EditManagerName({
             type="text"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
+            onBlur={handleBlur}
             onKeyDown={handleKeyDown}
             aria-invalid={Boolean(error)}
             autoFocus
@@ -132,6 +142,7 @@ export function EditManagerName({
           <button
             type="submit"
             disabled={isSaving}
+            onMouseDown={(event) => event.preventDefault()}
             className="shrink-0 cursor-pointer rounded-r-lg border border-zinc-950 bg-zinc-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-50 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
           >
             Edit Name

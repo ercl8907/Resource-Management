@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, type FocusEvent } from "react";
 import type { ManagerRenamedDetail } from "@/app/components/chrome";
 
 type Manager = {
@@ -107,6 +107,20 @@ export default function ExistingManagersPage() {
     } else {
       setSortKey(key);
       setSortDirection("asc");
+    }
+  }
+
+  function cancelEditing() {
+    setEditingManagerId(null);
+    setEditingName("");
+  }
+
+  // Keep editing while focus stays within the row's input/Update pair, but
+  // discard the in-progress value as soon as focus leaves that pair.
+  function handleEditorBlur(event: FocusEvent<HTMLInputElement>) {
+    const nextFocused = event.relatedTarget as Node | null;
+    if (!nextFocused || !event.currentTarget.parentElement?.contains(nextFocused)) {
+      cancelEditing();
     }
   }
 
@@ -340,12 +354,12 @@ export default function ExistingManagersPage() {
                             value={editingName}
                             autoFocus
                             onChange={(e) => setEditingName(e.target.value)}
+                            onBlur={handleEditorBlur}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
                                 handleSave(manager.id, editingName);
                               } else if (e.key === "Escape") {
-                                setEditingManagerId(null);
-                                setEditingName("");
+                                cancelEditing();
                               }
                             }}
                             className="rounded border border-zinc-300 bg-white px-3 py-1 text-sm font-medium outline-none ring-2 ring-zinc-400 focus:border-zinc-500 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:ring-zinc-400 dark:focus:border-zinc-500 dark:focus:ring-zinc-400"
@@ -353,6 +367,7 @@ export default function ExistingManagersPage() {
                           <button
                             type="button"
                             disabled={isSaving}
+                            onMouseDown={(e) => e.preventDefault()}
                             onClick={(e) => {
                               e.stopPropagation();
                               handleSave(manager.id, editingName);

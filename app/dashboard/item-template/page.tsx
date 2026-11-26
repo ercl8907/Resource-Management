@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, type FocusEvent } from "react";
 import type { TemplateRenamedDetail } from "@/app/components/chrome";
 
 type ItemTemplate = {
@@ -53,7 +53,9 @@ function SortIndicator({
 export default function ItemTemplatePage() {
   const [templates, setTemplates] = useState<ItemTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // List-load failures replace the table; create-form failures stay under the form.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
@@ -77,7 +79,7 @@ export default function ItemTemplatePage() {
   useEffect(() => {
     async function load() {
       setIsLoading(true);
-      setError(null);
+      setLoadError(null);
       try {
         const res = await fetch("/api/item-templates/list");
         const data = (await res.json().catch(() => ({}))) as {
@@ -85,12 +87,12 @@ export default function ItemTemplatePage() {
           templates?: ItemTemplate[];
         };
         if (!res.ok) {
-          setError(data.error ?? "Could not load templates. Please try again.");
+          setLoadError(data.error ?? "Could not load templates. Please try again.");
           return;
         }
         setTemplates(data.templates ?? []);
       } catch {
-        setError("Network error. Please try again.");
+        setLoadError("Network error. Please try again.");
       } finally {
         setIsLoading(false);
       }
@@ -104,6 +106,20 @@ export default function ItemTemplatePage() {
     } else {
       setSortKey(key);
       setSortDirection("asc");
+    }
+  }
+
+  function cancelEditing() {
+    setEditingTemplateId(null);
+    setEditingTemplateName("");
+  }
+
+  // Keep editing while focus stays within the row's input/Update pair, but
+  // discard the in-progress value as soon as focus leaves that pair.
+  function handleEditorBlur(event: FocusEvent<HTMLInputElement>) {
+    const nextFocused = event.relatedTarget as Node | null;
+    if (!nextFocused || !event.currentTarget.parentElement?.contains(nextFocused)) {
+      cancelEditing();
     }
   }
 
@@ -165,11 +181,11 @@ export default function ItemTemplatePage() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError(null);
+    setFormError(null);
     setSuccess(false);
 
     if (!templateName.trim()) {
-      setError("Please enter a template name.");
+      setFormError("Please enter a template name.");
       return;
     }
 
@@ -186,7 +202,7 @@ export default function ItemTemplatePage() {
       };
 
       if (!res.ok) {
-        setError(data.error ?? "Could not create template. Please try again.");
+        setFormError(data.error ?? "Could not create template. Please try again.");
         return;
       }
 
@@ -198,7 +214,7 @@ export default function ItemTemplatePage() {
         setTemplates((prev) => [...prev, created]);
       }
     } catch {
-      setError("Network error. Please try again.");
+      setFormError("Network error. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -243,14 +259,18 @@ export default function ItemTemplatePage() {
           name="templateName"
           type="text"
           value={templateName}
-          onChange={(e) => setTemplateName(e.target.value)}
+          onChange={(e) => {
+            setTemplateName(e.target.value);
+            setFormError(null);
+            setSuccess(false);
+          }}
           placeholder="e.g. Box of items"
-          aria-invalid={Boolean(error)}
+          aria-invalid={Boolean(formError)}
           className="w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 outline-none transition focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-zinc-50 dark:focus:ring-zinc-50"
         />
-        {error && (
+        {formError && (
           <p role="alert" className="mt-1.5 text-sm text-red-600 dark:text-red-400">
-            {error}
+            {formError}
           </p>
         )}
         {success && (
@@ -269,9 +289,9 @@ export default function ItemTemplatePage() {
 
       {isLoading ? (
         <p className="text-sm text-zinc-600 dark:text-zinc-400">Loading...</p>
-      ) : error ? (
+      ) : loadError ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          {error}
+          {loadError}
         </p>
       ) : templates.length === 0 ? (
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -344,12 +364,12 @@ export default function ItemTemplatePage() {
                             value={editingTemplateName}
                             autoFocus
                             onChange={(e) => setEditingTemplateName(e.target.value)}
+                            onBlur={handleEditorBlur}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
                                 handleSave(template.id, editingTemplateName);
                               } else if (e.key === "Escape") {
-                                setEditingTemplateId(null);
-                                setEditingTemplateName("");
+                                cancelEditing();
                               }
                             }}
                             className="rounded border border-zinc-300 bg-white px-3 py-1 text-sm font-medium outline-none ring-2 ring-zinc-400 focus:border-zinc-500 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:ring-zinc-400 dark:focus:border-zinc-500 dark:focus:ring-zinc-400"
@@ -357,6 +377,7 @@ export default function ItemTemplatePage() {
                           <button
                             type="button"
                             disabled={isSaving}
+                            onMouseDown={(e) => e.preventDefault()}
                             onClick={(e) => {
                               e.stopPropagation();
                               handleSave(template.id, editingTemplateName);

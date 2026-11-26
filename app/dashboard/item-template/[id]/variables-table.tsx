@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, useTransition } from "react";
+import { useLayoutEffect, useRef, useState, useTransition, type FocusEvent } from "react";
 import {
   renameTemplateVariable,
   swapTemplateVariableOrder,
@@ -61,6 +61,18 @@ export function VariablesTable({ variables }: { variables: TemplateVariable[] })
     setEditingLengthVariableId(null);
     setEditingLength("");
     setErrorMessage("");
+  }
+
+  // Keep editing while focus stays within an input/Update pair, but discard
+  // the in-progress value as soon as focus leaves that pair.
+  function handleBlur(
+    event: FocusEvent<HTMLInputElement>,
+    cancel: () => void
+  ) {
+    const nextFocused = event.relatedTarget as Node | null;
+    if (!nextFocused || !event.currentTarget.parentElement?.contains(nextFocused)) {
+      cancel();
+    }
   }
 
   function handleSaveName(variableId: string, variableName: string) {
@@ -167,6 +179,7 @@ export function VariablesTable({ variables }: { variables: TemplateVariable[] })
                           value={editingVariableName}
                           autoFocus
                           onChange={(e) => setEditingVariableName(e.target.value)}
+                          onBlur={(event) => handleBlur(event, cancelNameEditing)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               handleSaveName(variable.id, editingVariableName);
@@ -179,6 +192,7 @@ export function VariablesTable({ variables }: { variables: TemplateVariable[] })
                         <button
                           type="button"
                           disabled={isSaving}
+                          onMouseDown={(e) => e.preventDefault()}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleSaveName(variable.id, editingVariableName);
@@ -222,6 +236,7 @@ export function VariablesTable({ variables }: { variables: TemplateVariable[] })
                           value={editingLength}
                           autoFocus
                           onChange={(e) => setEditingLength(e.target.value)}
+                          onBlur={(event) => handleBlur(event, cancelLengthEditing)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               handleSaveLength(variable.id, editingLength);
@@ -234,6 +249,7 @@ export function VariablesTable({ variables }: { variables: TemplateVariable[] })
                         <button
                           type="button"
                           disabled={isSaving}
+                          onMouseDown={(e) => e.preventDefault()}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleSaveLength(variable.id, editingLength);

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useState, type FocusEvent } from "react";
 
 export type ItemRow = {
   id: string;
@@ -38,6 +38,15 @@ export function ItemRows({ rows }: { rows: ItemRow[] }) {
     setError(null);
     setEditingId(null);
     setEditingName("");
+  }
+
+  // Keep editing while focus stays within the input/Update pair, but discard
+  // the in-progress value as soon as focus leaves that pair.
+  function handleBlur(event: FocusEvent<HTMLInputElement>) {
+    const nextFocused = event.relatedTarget as Node | null;
+    if (!nextFocused || !event.currentTarget.parentElement?.contains(nextFocused)) {
+      cancelEditing();
+    }
   }
 
   async function save(id: string) {
@@ -112,6 +121,7 @@ export function ItemRows({ rows }: { rows: ItemRow[] }) {
                       value={editingName}
                       autoFocus
                       onChange={(event) => setEditingName(event.target.value)}
+                      onBlur={handleBlur}
                       onKeyDown={(event) => {
                         if (event.key === "Enter") {
                           save(row.id);
@@ -124,6 +134,7 @@ export function ItemRows({ rows }: { rows: ItemRow[] }) {
                     <button
                       type="button"
                       disabled={isSaving}
+                      onMouseDown={(event) => event.preventDefault()}
                       onClick={() => save(row.id)}
                       className="shrink-0 rounded bg-zinc-100 px-3 py-1 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
                     >

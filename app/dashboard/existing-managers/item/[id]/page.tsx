@@ -1,7 +1,8 @@
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
+import { ItemFieldsForm, type ItemField } from "./item-fields-form";
 
 // The item lookup must run before anything is sent to the browser, so this
 // route blocks instead of being prerendered with a static shell.
@@ -69,11 +70,58 @@ export default async function ItemDetailPage({
     redirect("/dashboard");
   }
 
-  const { data: manager } = await supabase
+  // Follow the item -> manager -> template -> template-variable chain, with
+  // every hop scoped to the signed-in user. manager_item.manager_id stores the
+  // managers.id foreign key (user_manager_id is only the URL-facing id).
+  const { data: manager, error: managerError } = await supabase
     .from("managers")
-    .select("user_manager_id, manager_name")
+    .select("item_template_id")
     .eq("id", item.manager_id)
+    .eq("user_id", user.id)
     .maybeSingle();
+
+  let itemVariables: ItemField[] = [];
+  let variablesError: string | null = managerError
+    ? managerError.message ?? "Could not load item fields."
+    : null;
+
+  if (!variablesError && manager?.item_template_id) {
+    const { data: template, error: templateError } = await supabase
+      .from("item_template")
+      .select("id")
+      .eq("template_user_id", manager.item_template_id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (templateError) {
+      variablesError = templateError.message ?? "Could not load item fields.";
+    } else if (template) {
+      // The variables table has no SELECT policy in the deployed database, so
+      // read it with the service-role client after the ownership checks above.
+      let admin: ReturnType<typeof createAdminClient> | null = null;
+      try {
+        admin = createAdminClient();
+      } catch {
+        variablesError = "Could not load item fields. Please try again.";
+      }
+
+      if (admin) {
+        const { data: variables, error: fetchVariablesError } = await admin
+          .from("item_template_variables")
+          .select("id, variable_name, variable_length, item_order")
+          .eq("user_id", user.id)
+          .eq("item_template_id", template.id)
+          .order("item_order", { ascending: true, nullsFirst: false });
+
+        if (fetchVariablesError) {
+          variablesError =
+            fetchVariablesError.message ?? "Could not load item fields.";
+        } else {
+          itemVariables = (variables ?? []) as ItemField[];
+        }
+      }
+    }
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-6">
@@ -81,18 +129,15 @@ export default async function ItemDetailPage({
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
           {item.item_name}
         </h1>
-        {manager && (
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Item in{" "}
-            <Link
-              href={`/dashboard/existing-managers/${encodeURIComponent(manager.user_manager_id)}`}
-              className="font-medium text-zinc-900 underline-offset-4 transition hover:underline dark:text-zinc-50"
-            >
-              {manager.manager_name}
-            </Link>
-          </p>
-        )}
       </div>
+
+      {variablesError && (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {variablesError}
+        </p>
+      )}
+
+      {itemVariables.length > 0 && <ItemFieldsForm fields={itemVariables} />}
     </div>
   );
 }
